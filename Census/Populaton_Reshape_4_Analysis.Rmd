@@ -1,0 +1,161 @@
+---
+title: "Population Reshape for Analysis"
+author: "José A. Bartolomei-Díaz, PhD - Outcome Project"
+date: "July 11, 2015"
+output: html_document
+---
+
+This document contains the procdures to obtain population distribution by municipality, gender and age group to be able to calculate the SIR.
+
+# Generate Population Aggregation for the year 2010
+
+## Load population by municipality, Gender and Age Group
+
+```{r Load_popMuniSexAge}
+Pop_Est <- read.csv2(file =
+								 	"/media/truecrypt2/ORP2/Population_Estimates/Census/PR_Population_Estimates.csv",
+					header = TRUE, sep = ",")
+
+# Remove municipio Characters from the MUNICIPIO variable
+Pop_Est <- data.frame(Pop_Est, Muni = 
+		gsub(pattern = "Municipio", Pop_Est$NAME, replacement = "")
+	)
+```
+
+### Reformat muni variable as character
+```{r}
+Pop_Est$Muni <- as.character(Pop_Est$Muni)
+is.character(Pop_Est$Muni)
+```
+
+# Data set for manipulation
+```{r newDF}
+pop <- Pop_Est
+```
+
+# Subset data
+Here we will subset the data and prepare reshaped data to be use in analyasis. 
+The compleate work is to modify this script so all the years with estimates are reshaped not only the year 2010.
+
+```{r ColSubset}
+# Select a some columns of the original data set
+pop <- pop[, c("Muni", "SEX", "AGEGRP", "POPESTIMATE2010")]
+
+# Rename the column names
+colnames(pop) <- c("Muni", "SEX", "AGEGRP", "EST10")
+
+# Add labels to Sex variable
+pop$SEX <- factor(pop$SEX, labels = c("Total", "Male", "Female"))
+
+# Add laberls to Age Group Variables
+pop$AGEGRP <- factor(pop$AGEGRP,
+										 labels = c("Total", "0-4", "5-9", "10-14", "15-19",
+										 					 "20-24", "25-29", "30-34", "35-39", "40-44",
+										 					 "45-49", "50-54", "55-59", "60-64", "65-69",
+										 					 "70-74", "75-79", "80-84", "85+"))
+
+head(pop)
+```
+
+### Remove Rows labeled as Total
+```{r}
+pop <- pop[pop$SEX != "Total" & pop$AGEGRP != "Total",]
+
+pop$SEX <- factor(pop$SEX)
+pop$AGEGRP <- factor(pop$AGEGRP)
+table(pop$SEX)
+table(pop$AGEGRP)
+head(pop)
+```
+# Create an 10 year age groups
+```{r Age10}
+pop$Age10 <- NA
+# Age10 <- "0-19"
+pop$Age10[pop$AGEGRP %in% c("0-4", "5-9", "10-14", "15-19")] <- "0-19"
+ # Age10 <- "20-29"
+pop$Age10[pop$AGEGRP %in% c("20-24", "25-29") ] <- "20-29"
+# Age10 <- "30-39"
+pop$Age10[pop$AGEGRP %in% c("30-34", "35-39") ] <- "30-39"
+# Age10 <- "40-49"
+pop$Age10[pop$AGEGRP %in% c("40-44", "45-49") ] <- "40-49"
+# Age10 <- "50-59"
+pop$Age10[pop$AGEGRP %in% c("50-54", "55-59") ] <- "50-59"
+# Age10 <- "60-69"
+pop$Age10[pop$AGEGRP %in% c("60-64", "65-69") ] <- "60-69"
+# Age10 <- "70-79"
+pop$Age10[pop$AGEGRP %in% c("70-74", "75-79") ] <- "70-79"
+# Age10 <- "80+"
+pop$Age10[pop$AGEGRP %in% c("80-84", "85+") ] <- "80+"
+
+```
+# Aggregate data by Age10 (I will over wirte the previous pop with this 10 year age aggregation)
+```{r}
+pop <- aggregate(EST10 ~ Muni + SEX + Age10, data = pop, FUN = sum)
+
+# verify recode and aggregation
+# aggregate(EST10 ~ AGEGRP, data = pop, FUN = sum)
+# aggregate(EST10 ~ Age10, data = pop10, FUN = sum)
+```
+
+
+# The end result is an arry of popultion total of Municipality by Gender and Age group
+
+```{r popMGA}
+Pop_MGA <- pop
+rm(pop)
+head(Pop_MGA)
+```
+
+## Reshape population information as require functioin epi.inderectadj
+
+```{r PopMG}
+library(reshape2)
+# 2010 Census Population by Municipality and Gender
+Pop_MG <- dcast(Pop_MGA, formula = Muni ~ SEX, fun.aggregate = sum, value.var= "EST10")
+head(Pop_MG)
+```
+# 2010 Census Population by Municipality and Age Group
+```{r pMA}
+Pop_MA <- dcast(Pop_MGA,
+						 formula = Muni ~ Age10, fun.aggregate = sum,
+						 value.var= "EST10")
+head(Pop_MA)
+```
+
+# 2010 Census Population by Municipality, Gender and Age Group but casted
+```{r pMGAc}
+Pop_MGAc <- dcast(Pop_MGA,
+						 formula = Muni ~ SEX + Age10, fun.aggregate = sum,
+						 value.var= "EST10")
+head(Pop_MGAc)
+
+# Modify order of the columns to match observed cases data
+Pop_MGAc <- data.frame(Muni = Pop_MGAc[, 1], Pop_MGAc[, c(10:17)], Pop_MGAc[, c(2:9)])
+```
+
+# Population by Gender
+```{r Pop_Gen}
+Pop_Gen <- aggregate(EST10 ~ SEX, data = Pop_MGA, FUN = sum)
+
+head(Pop_Gen)
+```
+
+# Population by Age
+```{r Pop_Age10}
+Pop_Age10 <- aggregate(EST10 ~ Age10, data = Pop_MGA, FUN = sum)
+
+head(Pop_Age10)
+```
+
+# Population by Municipality
+```{r Pop_Muni}
+Pop_Muni <- aggregate(EST10 ~ Muni, data = Pop_MGA, FUN = sum)
+
+head(Pop_Muni)
+```
+
+# Save 2010 Estimates
+```{r Save_2010_Estimates}
+save.image("/media/truecrypt2/ORP2/Population_Estimates/Census/Pop_Estimates_2010.RData")
+```
+

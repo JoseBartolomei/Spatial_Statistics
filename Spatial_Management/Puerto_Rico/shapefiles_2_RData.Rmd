@@ -1,0 +1,153 @@
+---
+title: "From Shapefiles to R.Data"
+author: "José A. Bartolomei-Díaz, PhD - Outcome Project"
+date: "July 13, 2015"
+output: html_document
+---
+
+This is R Markdown document contain the processess to convert shapefiles to R data frames in order to be albe to map them with ggplot2. All the proccesed shapefile will be stored in .RData format. Doing this future work will not have to process the shapefile just call the .RData,
+
+At The moment the included shapefiels ar3:
+
+1. Geocordinates of hospitals
+2. Geocoordinates of CDT
+3. Geocoordinates of 330 centers
+
+
+# Load library
+```{r}
+library(maptools)
+library(ggplot2)
+```
+# Load managed Spatial Polygon of Puerto Rico
+
+Puerto Rico map is loaded to display layer information above it and have a better visual representation of the information .
+
+```{r}
+load("/media/truecrypt2/ORP2/Spatial/R_Geo_Layers/Puerto_Rico/PR_Muni_Map.RData")
+# rename map for easy programming
+map <- PR_Muni_Map
+# Remove original map
+rm(PR_Muni_Map)
+```
+
+# Hospital Location Layer
+
+## Load Hospital Shapefile
+
+```{r Load_Hops_Layer}
+HospL <- readShapeSpatial("/media/truecrypt2/ORP2/Spatial/Shapefiles/Hospital_Locations/HOSP_2014.shp")
+# Hospital Layer
+HospL <- as.data.frame(HospL)
+```
+
+## Plot and Verify Hospitals Information
+
+```{r verifyHosp}
+ggplot() + 
+	geom_polygon(aes(x = long, y = lat, group = group, label = "id"),
+								 data = map, 
+							 colour = "black", fill = "grey") +
+	geom_point(data = HospL,
+											aes(x = LONGITUDE, y = LATITUD),
+											color = "Yellow") +
+	coord_map()
+```
+
+## Save as an .RData Hospital Information
+
+```{r saveHosp}
+save(HospL,
+		 file = "/media/truecrypt2/ORP2/Spatial/R_Geo_Layers/Puerto_Rico/HospL.RData")
+```
+
+###############################################
+# 330 Center Location Layer
+
+## Load 330 Center Shapefile
+
+```{r Load_330_Layer}
+C330L <- readShapeSpatial("/media/truecrypt2/ORP2/Spatial/Shapefiles/C-330/CENTROS_330_2013.shp")
+# Hospital Layer
+C330L <- as.data.frame(C330L)
+```
+
+## Plot and Verify C330 Information
+
+```{r verifyC330}
+ggplot() + 
+	geom_polygon(aes(x = long, y = lat, group = group, label = "id"),
+								 data = map, 
+							 colour = "black", fill = "grey") +
+	geom_point(data = C330L,
+											aes(x = LONG, y = LAT),
+											color = "Blue") +
+	coord_map()
+```
+
+## Save as an .RData 330 Centers Information
+
+```{r saveC330}
+save(C330L,
+		 file = "/media/truecrypt2/ORP2/Spatial/R_Geo_Layers/Puerto_Rico/C330L.RData")
+```
+
+###############################################
+# CDT (Centros de Diagnóstico y Tratamiento) Location Layer
+
+## Load CDTCenter Shapefile
+
+```{r Load_CDT_Layer}
+CdtL <- readShapeSpatial("/media/truecrypt2/ORP2/Spatial/Shapefiles/CDT/CDT.shp")
+# Hospital Layer
+CdtL <- as.data.frame(CdtL)
+```
+
+## Plot and Verify CDT Information
+
+```{r verifyCDT}
+ggplot() + 
+	geom_polygon(aes(x = long, y = lat, group = group, label = "id"),
+								 data = map, 
+							 colour = "black", fill = "grey") +
+	geom_point(data = CdtL,
+											aes(x = LONG_, y = LAT),
+											color = "Red") +
+	coord_map()
+```
+## Save as an .RData the CDT Information
+
+```{r saveCdtL}
+save(CdtL,
+		 file = "/media/truecrypt2/ORP2/Spatial/R_Geo_Layers/Puerto_Rico/CdtL.RData")
+```
+
+###########################################3
+# Plot all the information
+
+```{r All_Layers, fig.width=15, fig.height=10}
+
+ggplot() + 
+	geom_polygon(aes(x = long, y = lat, group = group, label = "id"),
+							 data = map, 
+							 colour = "black", fill = "grey") +
+# HospL
+	geom_point(data = HospL,
+						 aes(x = LONGITUDE, y = LATITUD),
+						 color = "Yellow") +
+# C330L
+	geom_point(data = C330L,
+						 aes(x = LONG, y = LAT),
+						 color = "Blue") +
+# CDTL	
+	geom_point(data = CdtL,
+						 aes(x = LONG_, y = LAT),
+						 color = "Red") +
+	coord_map() +
+
+# Title
+	ggtitle("Posición geoespacial de Hospitales, Centros 330 y CDT's en Puerto Rico. \n Amarillo = Hospitales; Azul = 330; Rojo = CDT")
+
+ggsave(filename = "/media/truecrypt2/ORP2/Spatial/R_Geo_Layers/Puerto_Rico/Map.pdf")
+```
+

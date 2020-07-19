@@ -1,0 +1,321 @@
+---
+title: "Municipio Spatial"
+author: "José A. Bartolomei-Díaz, PhD - Outcome Project"
+date: "June 5, 2015"
+output: pdf_document
+---
+
+```{r rm3}
+rm(list = ls(all = TRUE))
+```
+
+
+library
+
+```{r library3}
+library(ggplot2)
+library(ggmap)
+library(sp)
+library(rgeos)
+library(maptools)
+library(xtable)
+```
+
+
+Load managed Spatial Polygon of Puerto Rico
+```{r load3}
+
+load("/media/truecrypt2/ORP2/Spatial/R_Geo_Layers/Puerto_Rico/PR_Muni_Map.RData")
+
+map <- PR_Muni_Map
+rm(PR_Muni_Map)
+```
+
+
+```{r Cases_df}
+load("/media/truecrypt2/ORP2/Alzheimer_Registry/Data/Managed_Data/AlDf.RData")
+```
+
+# There are 27 records without municipalities.
+
+
+Select complete cases
+```{r completeCases}
+### Create a data.frame excluding those rows wich AgeCut == "NA"
+#AlDfB <- 	AlDf[!(is.na(AlDf$Edad)),] Extrae los NA pero solo de una columna a la vez
+AlDf <- AlDf[complete.cases(AlDf[, c("Edad", "Genero")]),] 
+```
+Visualy check the remove Na's in Edad
+```{r check3}
+head(data.frame(AlDf$Edad, AlDf$AgeCut))
+tail(data.frame(AlDf$Edad, AlDf$AgeCut))
+table(AlDf$AgeCut)
+```
+
+
+Check if Gender have Na'
+```{r Gender_NA}
+#
+table(AlDf$Genero)
+#Remove those rows with gender == "" (Blanck Space)
+AlDf <- AlDf[AlDf$Genero != "",]
+AlDf$Genero <- factor(AlDf$Genero,
+											labels = c("Female", "Male"))
+table(AlDf$Genero)
+```
+```{r Muni_NA}
+##################################################
+# Check if Municipality have Na's
+length(AlDf$Municipio.Recidencia)
+#Remove those rows with gender == "" (Blanck Space)
+AlDf <- AlDf[AlDf$Municipio.Recidencia != "",]
+length(AlDf$Municipio.Recidencia)
+```
+
+```{r length}
+length(table(as.factor(AlDf$Municipio.Recidencia), exclude = ""))
+# Slecting zips using the table found in the internet
+# AlDf <-
+# 	dim(AlDf[!AlDf$Municipio.Recidencia %in% "",])
+
+
+A_cases <- data.frame(table(as.factor(AlDf$Municipio.Recidencia), exclude = ""))
+colnames(A_cases)	<- c("Muni", "Cases")
+# There is a need to transform to character and order the muni names
+
+A_cases
+```
+# Hospital Location Coverage
+
+Load Hospital Layer
+```{r Load_Hops_Layer}
+HospL <- readShapeSpatial("/home/surfprjab/Dropbox/OutcomeProjectTeam/shapefile/Hospital_Locations/HOSP_2014.shp")
+HospL2 <- as.data.frame(HospL)
+```
+
+Create a vector of aggregated values by municipalities
+```{r CutValues}
+# Create aggregated values of Cases
+
+###########################################
+### Cut 1 ####
+###########################################
+A_cases$Cut <- cut(A_cases$Cases,
+									 breaks = c("0", "1", "100", "200",
+									 					 "300", "400", Inf),
+									 labels = c("0-1", "2-100", "101-200", "201-300",
+									 					 "301-400", "401-1677")
+									 )
+
+summary(A_cases$Cut)
+
+###########################################
+### Cut IQR ####
+###########################################
+options(scipen=999)
+A_cases$CutIQR <- cut(A_cases$Cases, breaks = c(0, quantile(A_cases$Cases)),
+									labels = c("0-2", "2-47.2", "47.3-111", "112-202",
+										 paste("203-", max(A_cases$Cases), sep = ""))
+											)
+
+summary(A_cases$CutIQR)
+```
+
+A row unique ID will be needed to merge both data.frame. This is becuase there are some differences in municipalities names in the data frames.
+```{r IDnum}
+head(A_cases)
+A_cases$IDnum <- seq(1:78)
+```
+
+Verify colums to merge
+```{r Verify2Merge}
+data.frame(map[!duplicated(map$id),][, 1:2], A_cases[, c("Muni", "IDnum")])
+```
+
+
+An id per municipality because id name did not matched between the Spatial Data and the AlDf. 
+```{r un_Muni}
+# unique Municiaplities
+un_Muni <- data.frame(MuniID = unique(map$id))
+un_Muni$IDnum <- seq(1:78)
+# 
+# map <- merge(x = map, y = un_Muni, by.x = "IDnum",
+# 												 by.y = "IDnum")
+
+# verificar que los municipios tengan el mismo id para poder merge.
+data.frame(map[!duplicated(map$id),][, 1:2], un_Muni[, c("MuniID", "IDnum")])
+
+map <- merge(x = map, y = A_cases[, -1], by.x = "IDnum",
+												 by.y = "IDnum")
+head(map)
+
+```
+
+```{r MapMuni_Cases_Cut6, fig.width=15, fig.height=10, fig.path="/media/truecrypt2/ORP2/Alzheimer_Registry/Figures/"}
+
+MapMuni_Cases_Cut6 <- 
+	ggplot(data = map) +
+		geom_polygon(aes(x = long, y = lat, group = id,
+										 fill = Cut)) + 
+#geom_text(data = MuniID, aes(x = long, y = lat, label = id)) +
+	
+			geom_polygon(aes(x = long, y = lat, group = group, label = "id"),
+								 data = map, 
+							 colour = "black", fill = "grey", alpha = .1) + #
+	theme(legend.position="bottom") +
+	coord_map() + 
+	
+#	ggtitle("Alzheimer cases by municipality, 2008-2013") +
+	# Include total number of caes
+	geom_text(data = NULL, x = -65.50, y = 18.46, size = 6,
+						label = paste("N = ", format(nrow(AlDf),
+																				 big.mark = ","),
+													sep = "")) +
+	# Include mean and SDeviation
+	geom_text(data = NULL, x = -65.57, y = 17.96, size = 4, 
+						label = paste("mean = ",  round(mean(A_cases$Cases), 2),
+													" ; ",
+													"sd = ",  round(sqrt(var(A_cases$Cases)), 2),
+																					 sep = "")) +
+	geom_point(data = HospL2,
+											aes(x = LONGITUDE, y = LATITUD),
+											color = "Yellow") +
+	
+	scale_fill_brewer(palette = 5, 
+										guide = guide_legend(title = "Number of Cases")) +
+	labs(x = "Longitude", y = "Latitude") 
+
+MapMuni_Cases_Cut6
+
+```
+
+### Quartile Muni Map
+
+```{r MapMuni_Cases_CutIQR, fig.width=15, fig.height=10, fig.path="/media/truecrypt2/ORP2/Alzheimer_Registry/Figures/"}
+
+MapMuni_Cases_CutIQR <- 
+	ggplot(data = map) +
+		geom_polygon(aes(x = long, y = lat, group = id,
+										 fill = CutIQR)) + 
+#geom_text(data = MuniID, aes(x = long, y = lat, label = id)) +
+	
+			geom_polygon(aes(x = long, y = lat, group = group, label = "id"),
+								 data = map, 
+							 colour = "black", fill = "grey", alpha = .1) + #
+	theme(legend.position="bottom") +
+	coord_map() + 
+	
+	ggtitle("Alzheimer cases by municipality, 2008-2013") +
+	geom_text(data = NULL, x = -65.35, y = 18.46, 
+						label = paste("N = ", format(nrow(AlDf),
+																				 big.mark = ",")
+						)
+	) +
+	geom_point(data = HospL2,
+											aes(x = LONGITUDE, y = LATITUD),
+											color = "Yellow") +
+	
+	scale_fill_brewer(palette = 5) +
+	labs(x = "Longitude", y = "Latitude")
+
+MapMuni_Cases_CutIQR
+```
+
+## Map With Info of Cases by Gender
+
+```{r Agen_Cases}
+Agen_cases <- data.frame(table(as.factor(AlDf$Municipio.Recidencia),
+															 AlDf$Genero, exclude = ""))
+
+colnames(Agen_cases) <- c("Muni", "Gender", "Cases")
+
+Agen_cases
+#################################################################
+# Because municipalities ids do not match run the following
+
+Agen_cases$IDnum <- rep(seq(1:78), 2)
+
+SpatialDataMuniC <- 
+	map[, !(names(map) %in% c("Cases", "Cut", "Cut2"))]
+	
+# verificar que los municipios tengan el mismo id para poder merge.
+data.frame(SpatialDataMuniC[!duplicated(SpatialDataMuniC$id),][, 1:2], Agen_cases[, c("Muni", "IDnum")])
+
+####
+SpatialDataMuniC <- merge(x = SpatialDataMuniC, y = Agen_cases,
+													by.x = "IDnum", by.y = "IDnum")
+head(SpatialDataMuniC)
+
+# Create aggregated values of Cases
+SpatialDataMuniC$Cut <- cut(SpatialDataMuniC$Cases,
+									 breaks = c("0", "1", "100", "200",
+									 					 "300", "400", Inf),
+									 labels = c("0-1", "2-100", "101-200", "201-300",
+									 					 "301-400", "401+")
+									 )
+# 
+# SpatialDataMuniC$Cut2 <- cut(SpatialDataMuniC$Cases,
+# 														 breaks = c("0", "1", "100", "300", "500", Inf),
+# 														 labels = c("0-1", "2-100", "101-300", "301-500",
+# 														 					 "501+"))
+
+```
+
+## Map A cases facet by gender
+
+```{r MapMuni_CasesGender, fig.width=15, fig.height=10, fig.path="/media/truecrypt2/ORP2/Alzheimer_Registry/Figures/"}
+
+MapMuni_CasesGender <- 
+	ggplot(data = SpatialDataMuniC) +
+		geom_polygon(aes(x = long, y = lat, group = group,
+										 fill = Cut)) + 
+#geom_text(data = MuniID, aes(x = long, y = lat, label = id)) +
+	
+			geom_polygon(aes(x = long, y = lat, group = group),
+								 data = SpatialDataMuniC, 
+							 colour = "black", fill = "grey", alpha = .1) + #
+	theme(legend.position="bottom") +
+	coord_map() + 
+	facet_wrap(~ Gender, ncol = 1) +
+
+#	ggtitle("Alzheimer cases by municipality and gender, 2008-2013") + 
+	geom_text(aes(x, y, label=lab),
+						data = data.frame(x = -65.35, y = 18.46, 
+														lab = c(paste("N = ", 
+																	format(nrow(subset(AlDf,
+																										 Genero == "Femenino")),
+ 																				 big.mark = ",")),
+																	paste("N = ", 
+																	format(nrow(subset(AlDf,
+																										 Genero == "Masculino")),
+ 																				 big.mark = ","))),
+														Gender = c("Female", "Male")), 
+													vjust=1) +
+	
+	scale_fill_brewer(palette = 5,
+										guide = guide_legend(title = "Number of Cases")) +
+	labs(x = "Longitude", y = "Latitude")
+
+
+MapMuni_CasesGender
+
+```
+
+```{r tableCheckCut}
+table(A_cases$Cut)
+```
+
+```{r SaveObjects3}
+save(MapMuni_Cases_Cut6, MapMuni_Cases_CutIQR, MapMuni_CasesGender, A_cases,
+file = "/media/truecrypt2/ORP2/Alzheimer_Registry/Objects/Map_Cases_Objects.Rdata")
+```
+
+```{r source_04}
+# # Convert from .Rnw to .R
+# knitr::knit(input = "/media/truecrypt2/ORP2/Alzheimer_Registry/04_Observed_Cases.Rmd",
+# 						output = "/media/truecrypt2/ORP2/Alzheimer_Registry/04_Observed_Cases.R",
+# 						tangle = TRUE)
+# 
+# # Source the Coverted R
+# source("/media/truecrypt2/ORP2/Alzheimer_Registry/04_Observed_Cases.R")
+```

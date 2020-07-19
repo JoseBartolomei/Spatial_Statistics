@@ -1,0 +1,580 @@
+---
+title: "Standardized Incidence Ratio by Municipalities, Puerto Rico"
+author: "José A. Bartolomei-Díaz, PhD - Outcome Project"
+output: html_document
+---
+
+This document calculate the SIR using the data prepared in the Observed_Cases.Rmd and the Spatial_Population.Rmd.
+
+# Remove Un-needed objects
+```{r rm_Objects}
+rm(list = ls(all = TRUE))
+```
+# Load needed objects created in previous scripts
+```{r load_Obs_Cases, echo=FALSE, results='hide'}
+
+# Observed Cases
+load("./Objects/Observed_Cases.RData")
+```
+# Load Census Population for analysis
+
+Load Census population arrangements from: /Population_Estimates/Census/Pop_Estimates_2010.RData.
+
+If new arrangement is needed open and edit the following file: 
+./Population_Estimates/Census/Populaton_Reshape_4_Analysis.Rmd
+
+
+#### Load population arrangements and select the needed to conduct the analysis.
+
+```{r Load_popMuniSexAge, echo=FALSE, results='hide'}
+load("./Population_Estimates/Census/Pop_Estimates_2010.RData")
+```
+
+# Crude Rate by Municipality
+
+```{r Muni_Crude_Rate, echo=FALSE, results='hide'}
+# Check muni order
+data.frame(Obs_Muni, Pop_Muni)
+# Muni_Crude_Rate
+MCR <- data.frame(IDnum = seq(1:78),
+															Name = Obs_Muni[, 1],
+															CrRate = (Obs_Muni[, 2] / Pop_Muni[, 2]) * 10000)
+
+#MCR <- MCR[, -2]
+MCR
+```
+
+```{r CrRateCut, echo=FALSE, results='hide'}
+
+
+###########################################
+### Cut IQR ####
+###########################################
+# Create an interqualtile SIR_G cut
+# The firt quartile was excluded because the small percentages of municipalities in this range and because was less than 1 per 10000
+
+MCR$CrIQR <- cut(MCR$CrRate, breaks = c(0, quantile(MCR$CrRate)),
+									labels = c("0-2.39", "2.4-14.0", "14.1-26.7",
+														 "26.8-37.8", "37.9-68.4")
+)
+
+MCR[order(MCR$CrRate),]
+# MCR$CrIQR <- cut(MCR$CrRate, breaks = c(0, quantile(MCR$CrRate)[-1]),
+# 									labels = c("0-9.51", "9.52-25.2", "25.3-66.7",
+# 														 "66.7-880")
+# )
+```
+
+## Map result
+## load Puerto Rico Municipality map
+```{r loadMuniMap, echo=FALSE, results='hide'}
+load("./Spatial_Polygons/Puerto_Rico/PR_Muni_Map.RData")
+
+map <- PR_Muni_Map
+rm(PR_Muni_Map)
+
+library(ggplot2)
+# Verify if the loaded polygons information display the desired map
+ggplot(data = map) +
+	geom_polygon(aes(x = long, y = lat, fill = id, alpha = .4)) +
+	coord_map()
+```
+
+# Hospital Location Coverage
+
+Load Desire Geographical Layers for analysis
+```{r Load_Hops_Layer, echo=FALSE, results='hide'}
+Path <- "./Spatial/R_Geo_Layers/Puerto_Rico/"
+# LL = Layer List
+LL <- c("C330L", "CdtL", "HospL")
+
+for(i in 1:length(LL)){
+	LLi <- LL[i]
+	file <- paste(Path, LL[i], ".RData", sep = "")
+	load(file = file)
+}
+```
+
+## Merge Crude Rate data with spatial data
+```{r df5, echo=FALSE, results='hide'}
+# verificar que los municipios tengan el mismo id para poder merge.
+data.frame(map[!duplicated(map$id),][, 1:2], MCR[, c("IDnum", "Name")])
+
+map <- merge(x = map, y = MCR, by.x = "IDnum", by.y = "IDnum" )
+```
+# Map Crude Rate Estimates
+
+```{r CrudeRateMap, , echo=FALSE, results='asis', fig.width=15, fig.height=10, fig.path="/Figures/"}
+
+# Arrange the sir information with coordinates
+MuniCrRate <- aggregate(cbind(long, lat) ~ CrRate, data = map,
+                    FUN=function(x)mean(range(x)))
+
+MapMuni_Crude_Rate <-
+	ggplot(data = map) +
+	geom_polygon(aes(x = long, y = lat, group = id, fill = CrIQR)) +
+	
+	geom_polygon(aes(x = long, y = lat, group = group, label = "id"),
+								 data = map, 
+							 colour = "black", fill = "grey", alpha = .1) + #
+	theme(legend.position="bottom") +
+	
+		#geom_text(data = MuniCrRate, aes(x = long, y = lat, label = round(CrRate, 1))) +
+	
+	# HospL
+	geom_point(data = HospL,
+						 aes(x = LONGITUDE, y = LATITUD),
+						 color = "Yellow") +
+# C330L
+# 	geom_point(data = C330L,
+# 						 aes(x = LONG, y = LAT),
+# 						 color = "Blue") +
+# CDTL	
+# 	geom_point(data = CdtL,
+# 						 aes(x = LONG_, y = LAT),
+# 						 color = "Red") +
+	
+	coord_map() +
+	
+	scale_fill_brewer(palette = 5,
+										guide = guide_legend(title = "Prevalence per 10,000")) +
+	
+#	ggtitle("Alzheimer crude rate by municipality, 2008-2013 \n Dots: Yellow = Hospitals") +
+#; Blue = 330 Centers; Red = CDT"
+	geom_text(data = NULL, x = -65.35, y = 18.46, 
+						label = paste("N = ", format(nrow(AlDf),
+																				 big.mark = ","))) +
+	labs(x = "Longitude", y = "Latitude")
+
+MapMuni_Crude_Rate
+
+```
+
+
+# SIR
+```{r lib_EpiR, echo=FALSE, results='hide'}
+library(epiR)
+options(scipen=999)
+```
+# Un-adjusted Spatial Standard morbidity Ratio
+
+# Un-adjusted Spatial Standard morbidity Ratio
+
+# Spatial Standard morbidity Ratio adjusted by Gender
+```{r un_SIR, echo=FALSE, results='hide'}
+obs <- matrix(Obs_Muni[, 2], dimnames = list(Obs_Muni[, 1], ""))
+obs
+
+pop <- matrix(Pop_Muni[, 2], dimnames = list(Pop_Muni[, 1], ""))
+pop
+
+std <- sum(obs) / sum(pop)
+
+std
+## SIR using funciton epi.indirectadj
+un_sir <- epi.indirectadj(obs = obs, pop = pop, std = std, units = 1)
+
+# Create a data frame with aditional information for other procedures
+un_sir <- data.frame(IDnum = seq(1:78), Muni = rownames(un_sir$smr.strata),
+										un_sir = un_sir$smr.strata$est)
+head(un_sir)
+
+# Create a manual cut
+un_sir$unsirCut <- cut(un_sir$un_sir, breaks = c(0, 1, 1.5, 2, 4, Inf),
+										labels = c("0-1.00", "1.01-1.49", "1.50-1.99",
+															 "2.00-3.99","4+")
+)
+
+
+```
+
+
+## Merge SIR data with spatial data
+```{r map_unsir_merge, echo=FALSE, results='hide'}
+map <- merge(x = map, y = un_sir, by.x = "IDnum", by.y = "IDnum" )
+```
+
+## Map gender adjusted SIR estimates
+
+```{r MapMuni_un_SIR, echo=FALSE, results='asis', fig.width=15, fig.height=10, fig.path="/Figures/"}
+
+# Arrange the sir information with coordinates
+MuniunSir <- aggregate(cbind(long, lat) ~ un_sir + id, data = map,
+										 FUN=function(x)mean(range(x)))
+
+MapMuni_un_SIR <-
+	ggplot(data = map) +
+	geom_polygon(aes(x = long, y = lat, group = id, fill = unsirCut)) +
+	
+	geom_polygon(aes(x = long, y = lat, group = group, label = "id"),
+							 data = map, 
+							 colour = "black", fill = "grey", alpha = .1) + #
+	theme(legend.position="bottom") +
+	
+	#geom_text(data = MuniSir, aes(x = long, y = lat, label = round(sirG, 1))) +
+	
+	# HospL
+	geom_point(data = HospL,
+						 aes(x = LONGITUDE, y = LATITUD),
+						 color = "Yellow") +
+	# C330L
+	# 	geom_point(data = C330L,
+	# 						 aes(x = LONG, y = LAT),
+	# 						 color = "Blue") +
+	# CDTL	
+	# 	geom_point(data = CdtL,
+	# 						 aes(x = LONG_, y = LAT),
+	# 						 color = "Red") +
+	
+	coord_map() +
+	
+	scale_fill_brewer(palette = 5,
+										guide = guide_legend(title = "Standardized Morbidity Ratio")) +
+	
+	#	ggtitle("Alzheimer un-adjusted Standardized Morbidity Ratio by municipality, 2008-2013 \n Dots: Yellow = Hospitals") +
+	#; Blue = 330 Centers; Red = CDT"
+	
+	geom_text(data = NULL, x = -65.35, y = 18.46, 
+						label = paste("N = ", format(nrow(AlDf),
+																				 big.mark = ","))) +
+	labs(x = "Longitude", y = "Latitude")
+
+MapMuni_un_SIR
+```
+
+# Spatial Standard morbidity Ratio adjusted by Gender
+```{r SIR_Sex, echo=FALSE, results='hide'}
+obs <- matrix(Obs_Muni[, 2], dimnames = list(Obs_Muni[, 1], ""))
+obs
+
+pop <- as.matrix(Pop_MG[, c("Male", "Female")])
+rownames(pop) <- Obs_Muni[, 1]							
+pop
+
+std <- data.frame(Male = Obs_Gen[2, "IDrow"] / Pop_Gen[1, "EST10"],
+									Female = Obs_Gen[1, "IDrow"] / Pop_Gen[2, "EST10"],
+									Total = sum(Obs_Gen[, "IDrow"]) / sum(Pop_Gen[, "EST10"])
+)
+
+std <- as.matrix(std)
+std
+## SIR using funciton epi.indirectadj
+sir_G <- epi.indirectadj(obs = obs, pop = pop, std = std, units = 1)
+
+# Create a data frame with aditional information for other procedures
+sir_G <- data.frame(IDnum = seq(1:78), Muni = rownames(sir_G$smr.strata),
+										sirG = sir_G$smr.strata$est)
+head(sir_G)
+
+# Create a manual cut
+sir_G$sirCut <- cut(sir_G$sirG, breaks = c(0, 1, 1.5, 2, 4, Inf),
+									labels = c("0-1.00", "1.01-1.49", "1.50-1.99",
+														 "2.00-3.99","4+")
+)
+
+# Create an interqualtile SIR_G cut
+sir_G$sirIQR <- cut(sir_G$sirG, breaks = c(0, quantile(sir_G$sirG)),
+									labels = c("0-0.0179", "1.0180-0.315", "0.316-0.833", "0.834-2.2",
+														 "2.3-30")
+)
+
+summary(sir_G$sirIQR)
+```
+
+
+## Merge SIR data with spatial data
+```{r map, echo=FALSE, results='hide'}
+map <- merge(x = map, y = sir_G, by.x = "IDnum", by.y = "IDnum" )
+```
+
+## Map gender adjusted SIR estimates
+
+```{r MapMuni_adjG_SIR, echo=FALSE, results='asis', fig.width=15, fig.height=10, fig.path="/Figures/"}
+
+# Arrange the sir information with coordinates
+MuniSir <- aggregate(cbind(long, lat) ~ sirG, data = map,
+                    FUN=function(x)mean(range(x)))
+
+MapMuni_adjG_SIR <-
+	ggplot(data = map) +
+	geom_polygon(aes(x = long, y = lat, group = id, fill = sirCut)) +
+	
+	geom_polygon(aes(x = long, y = lat, group = group, label = "id"),
+								 data = map, 
+							 colour = "black", fill = "grey", alpha = .1) + #
+	theme(legend.position="bottom") +
+	
+		#geom_text(data = MuniSir, aes(x = long, y = lat, label = round(sirG, 1))) +
+	
+	# HospL
+	geom_point(data = HospL,
+						 aes(x = LONGITUDE, y = LATITUD),
+						 color = "Yellow") +
+# C330L
+# 	geom_point(data = C330L,
+# 						 aes(x = LONG, y = LAT),
+# 						 color = "Blue") +
+# CDTL	
+# 	geom_point(data = CdtL,
+# 						 aes(x = LONG_, y = LAT),
+# 						 color = "Red") +
+	
+	coord_map() +
+	
+	scale_fill_brewer(palette = 5,
+										guide = guide_legend(title = "Standardized Morbidity Ratio")) +
+	
+#	ggtitle("Alzheimer sex adjusted Standardized Morbidity Ratio by municipality, 2008-2013 \n Dots: Yellow = Hospitals") +
+#; Blue = 330 Centers; Red = CDT"
+	
+	geom_text(data = NULL, x = -65.35, y = 18.46, 
+						label = paste("N = ", format(nrow(AlDf),
+																				 big.mark = ","))) +
+	labs(x = "Longitude", y = "Latitude")
+
+MapMuni_adjG_SIR
+```
+
+## SIR adjusted by gender and age group
+
+```{r SIR_SexAge, echo=FALSE, results='hide'}
+# obs will not be to be constructed because the same can be use.
+obs <- as.matrix(Obs_MGAc[ , -which(names(Obs_MGAc) %in% c("Municipio.Recidencia"))])
+rownames(obs) <- Obs_MGAc[, "Municipio.Recidencia"]							
+# Chage 0 to 0.005 to avoind Inf in the SIR results
+obs[obs == 0] <- 0.005
+head(obs)
+# Population
+pop1 <- Pop_MGAc[ , -which(names(Pop_MGAc) %in% c("Male_0.19", "Female_0.19"))]
+head(pop1)
+
+pop <- as.matrix(pop1[ , -which(names(pop1) %in% c("Muni"))])
+rownames(pop) <- pop1[, "Muni"]							
+pop
+
+
+std <- data.frame(std = c(colSums(obs)/colSums(pop), Total = sum(obs) / sum(pop)))
+
+std <- as.matrix(std)
+std
+## SIR using funciton epi.indirectadj
+sir_MGA <- epi.indirectadj(obs = obs, pop = pop, std = std, units = 0)
+
+# Create a data frame with aditional information for other procedures
+sir_MGA <- data.frame(IDnum = seq(1:78), Muni = rownames(sir_MGA$smr.strata),
+										sirMga = sir_MGA$smr.strata$est)
+head(sir_MGA)
+
+# Create a manual cut
+sir_MGA$sirMgaCut <- cut(sir_MGA$sirMga, breaks = c(0, 1, 1.5, 2, 4, Inf),
+									labels = c("0-1.00", "1.01-1.49", "1.50-1.99",
+														 "2.00-3.99","4+")
+)
+
+# Create an interqualtile SIR_G cut
+sir_MGA$sirMgaIQR <- cut(sir_MGA$sirMga, breaks = c(0, quantile(sir_MGA$sirMga)),
+									labels = c("0-0.0179", "1.0180-0.315", "0.316-0.833", "0.834-2.2",
+														 "2.3-30")
+)
+
+summary(sir_MGA$sirMgaIQR)
+```
+
+## Map gender adjusted SIR estimates
+
+### Merge SIR data with spatial data
+```{r sir_MGA, echo=FALSE, results='hide'}
+sir_MGA <- sir_MGA[, -2] # remove municipality columns to not repeate the column in map data when merged
+map <- merge(x = map, y = sir_MGA, by.x = "IDnum", by.y = "IDnum" )
+```
+
+```{r MapMuni_adjGA_SIR, echo=FALSE, results='asis', fig.width=15, fig.height=10, fig.path="/Figures/"}
+
+MuniSir2 <- aggregate(cbind(long, lat) ~ sirMga + id +IDnum, data = map,
+                    FUN=function(x)mean(range(x)))
+
+MapMuni_adjGA_SIR <- 
+	ggplot(data = map) +
+	geom_polygon(aes(x = long, y = lat, group = id, fill = sirMgaCut)) +
+	
+	geom_polygon(aes(x = long, y = lat, group = group, label = "id"),
+								 data = map, 
+							 colour = "black", fill = "grey", alpha = .1) + #
+	theme(legend.position="bottom") +
+	
+		#geom_text(data = MuniSir2, aes(x = long, y = lat, label = round(sirMga, 1))) +
+	
+		# HospL
+	geom_point(data = HospL,
+						 aes(x = LONGITUDE, y = LATITUD),
+						 color = "Yellow") +
+# C330L
+# 	geom_point(data = C330L,
+# 						 aes(x = LONG, y = LAT),
+# 						 color = "Blue") +
+# CDTL	
+# 	geom_point(data = CdtL,
+# 						 aes(x = LONG_, y = LAT),
+# 						 color = "Red") +
+	
+	coord_map() +
+	
+		scale_fill_brewer(palette = 5,
+										guide = guide_legend(title = "Standardized Morbidity Ratio")) +
+	
+#	ggtitle("Alzheimer age-sex adjusted Standardized Morbidity Ratio by municipality, 2008-2013 \n Dots: Yellow = Hospitals") +
+#; Blue = 330 Centers; Red = CDT"
+	geom_text(data = NULL, x = -65.38, y = 18.46, 
+						label = paste("N = ", format(nrow(AlDf),
+																				 big.mark = ",")
+						)) +
+		geom_text(data = NULL, x = -65.50, y = 18.00, size = 4,
+						label = paste("mean = ", round(mean(MuniSir2$sirMga), 2), " ; ",
+													"sd = ", round(sqrt(var(MuniSir2$sirMga)), 2),
+													sep = "")) +
+	labs(x = "Longitude", y = "Latitude")
+
+MapMuni_adjGA_SIR
+```
+
+# Confidence Intervals by Municipality
+
+```{r CIbyMuni}
+## SIR using funciton epi.indirectadj
+sir_MGA <- epi.indirectadj(obs = obs, pop = pop, std = std, units = 0)$smr.strata
+sir_MGA <- data.frame(Muni = row.names(sir_MGA), sir_MGA)
+```
+
+# Significance Tests
+```{r epitools}
+library(epitools)
+
+```
+
+
+# Empirical Bayes Smoothing
+```{r DCluster}
+library(DCluster)
+# Poisson-Gamma Empirical Bayes Smoothing
+eb <- with(data = sir_MGA, empbaysmooth(Observed = obs, Expected = exp))
+mean(eb$smthrr)
+sqrt(var(eb$smthrr))
+
+# Log Normal Smoothing
+ebln <- with(data = sir_MGA, lognormalEB(Observed = obs, Expected = exp))
+mean(ebln$smthrr)
+sqrt(var(ebln$smthrr))
+
+# EB Marshal
+library(spdep)
+ebM <- with(data = sir_MGA, EBest(n = obs, x = exp))
+mean(ebM$estmm)
+sqrt(var(ebM$estmm))
+
+# Spatially Structured Model
+# Load Spatial Structure
+# load("/media/truecrypt2/ORP2/Spatial/PR_Spatial_Structure.RData")
+# with(data = sir_MGA, EBlocal(ri = obs, ni = exp, nb = nb,
+# 														 zero.policy = FALSE))
+
+```
+
+
+## Add a binary significat collumn based on CI's
+```{r CreateSigVect}
+sir_MGA$sig[sir_MGA$est > 1 & sir_MGA$lower > 1] <- "Significantly Higer"
+
+sir_MGA$sig[sir_MGA$est < 1 & sir_MGA$upper < 1] <- "Significantly lower"
+
+sir_MGA$sig[sir_MGA$est > 1 & sir_MGA$lower <= 1 |
+						sir_MGA$est < 1 & sir_MGA$upper >= 1] <- "Not Significant"
+
+table(sir_MGA$sig)
+head(sir_MGA)	
+```
+
+```{r sir_MGA_df}
+sir_MGA <- data.frame(IDnum =  seq(1:78), sir_MGA)
+```
+
+
+```{r Graph_CIbyMuni}
+P_CI_Muni <-
+	ggplot(data = sir_MGA) +
+	geom_pointrange(aes(x= Muni, y = est, ymin = lower, ymax = upper, color = sig)) +
+	labs(x = "Municipalities", y = "Standardized Morbidity Ratio") +
+	theme(axis.text.x  = element_text(angle=90, vjust=0.5, size=16)) +
+	geom_hline(yintercept = 1, color = "Black") +
+
+	scale_color_discrete(guide = guide_legend(title = "Significance")) +
+	theme(legend.position="top") +
+	theme(axis.text.x = element_text(size = 6,
+																	 color = ifelse(sir_MGA$sig == "Significantly Higer",
+																	 							 "green", "darkgrey")))
+P_CI_Muni
+```
+
+# load again map to have clean one
+## load Puerto Rico Municipality map
+```{r loadMuniMap_Again, echo=FALSE, results='hide'}
+load("/Spatial_Polygons/Puerto_Rico/PR_Muni_Map.RData")
+```
+
+```{r map2}
+map2 <- merge(x = PR_Muni_Map, y = sir_MGA, by.x = "IDnum", by.y = "IDnum" )
+head(map2)
+```
+
+
+```{r SigMap}
+Sig_Map <- 
+	ggplot(data = map2) +
+	geom_polygon(aes(x = long, y = lat, group = id, fill = sig)) +
+	
+	geom_polygon(aes(x = long, y = lat, group = group, label = "id"),
+								 data = map, 
+							 colour = "black", fill = "grey", alpha = .1) + #
+	theme(legend.position="bottom") +
+	
+		#geom_text(data = MuniSir2, aes(x = long, y = lat, label = round(sirMga, 1))) +
+	
+		# HospL
+	geom_point(data = HospL,
+						 aes(x = LONGITUDE, y = LATITUD),
+						 color = "Yellow") +
+# C330L
+# 	geom_point(data = C330L,
+# 						 aes(x = LONG, y = LAT),
+# 						 color = "Blue") +
+# CDTL	
+# 	geom_point(data = CdtL,
+# 						 aes(x = LONG_, y = LAT),
+# 						 color = "Red") +
+	
+	coord_map() +
+	
+		scale_fill_brewer(palette = 5, guide = guide_legend(title = "Significance")) +
+	
+#	ggtitle("Alzheimer age-sex adjusted Standardized Morbidity Ratio by municipality, 2008-2013 \n Dots: Yellow = Hospitals") +
+#; Blue = 330 Centers; Red = CDT"
+	geom_text(data = NULL, x = -65.35, y = 18.46, 
+						label = paste("N = ", format(nrow(AlDf),
+																				 big.mark = ",")
+						)) +
+	labs(x = "Longitude", y = "Latitude") +
+	geom_text(data = NULL, x = -65.50, y = 18.00, 
+						label = paste("mean = ", round(mean(sir_MGA$est), 2),
+													" ; ",
+													"variance = ", round(var(sir_MGA$est), 2),
+													sep = ""), size = 3) 
+	
+Sig_Map
+```
+
+```{r SaveObjects}
+save(MapMuni_Crude_Rate, MapMuni_un_SIR, MapMuni_adjG_SIR,
+		 MapMuni_adjGA_SIR, P_CI_Muni, Sig_Map,
+file = "/Objects/Maps_SIR_Objects.Rdata")
+```
+
+

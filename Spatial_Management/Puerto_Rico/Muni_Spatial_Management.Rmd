@@ -1,0 +1,219 @@
+---
+title: "Municipality Spatial Management"
+author: "José A. Bartolomei-Díaz, PhD - Outcome Project"
+output: html_document
+---
+
+# Objective
+
+The objective of this work is to manage geographical spatial polygons to obtain an adequate map of Puerto Rico municipalities for spatial analysis. The result of this work is a data frame with information useful to display spatial information by municipality.
+
+# Processes
+
+## Remove all objects
+```{r}
+rm(list = ls(all = TRUE))
+```
+## Load libraries pertinent to spatial management and analysis
+
+```{r library}
+library(ggplot2)
+library(ggmap)
+library(sp)
+library(rgeos)
+library(maptools)
+```
+## Load map
+
+There can be various map formats such as shapefiles or R spatial polygons.  For this work we found an R spatial polygon from http://www.gadm.org/.  Next the Puerto Rico Spatial Polygon will be loaded to R.
+```{r}
+load("./shapefile/Polygon/PRI_adm1.RData")
+```
+When spatial information was analyzed with this map Puerto Rico non-municipality Island such as Mona and Desecheo caused obtain: (1) a small map of Puerto Rico main island due to the distance from Mona to Mayaguez, (2) the creating of artificial polygons when coloring the municipalities with outcome information.  The second is due to those small island belong to a particular municipality.  Furthermore, in the next procedure we will find and eliminate the Isla de Mona Polygonby displaying and identifing the polygons ID.
+
+```{r fig.width=16}
+pr_map <- unionSpatialPolygons(gadm, IDs = as.character(gadm@data$PID))
+
+SpatialDataMuni <- fortify(pr_map)
+
+MuniID <- aggregate(cbind(long, lat) ~ id, data = SpatialDataMuni,
+                    FUN=function(x)mean(range(x)))
+head(MuniID)
+
+ggplot() +
+		geom_polygon(aes(x = long, y = lat, group = group, label = "id"),
+								 data = SpatialDataMuni, 
+							 colour = "white", fill = "grey", alpha = .4, size = .3) + 
+	geom_text(data = MuniID, aes(x = long, y = lat, label = id))  + 
+	coord_map()
+```
+
+The id of the Mona Island Polygon is 2416.
+
+Next the Isla de Mona Polygon will be remove.
+
+```{r}
+pr_mapMuni <- gadm[gadm@data$PID != 2416,]
+pr_mapMuni <- unionSpatialPolygons(pr_mapMuni,
+					IDs = as.character(pr_mapMuni@data$NAME_1))
+
+SpatialDataMuni <- fortify(pr_mapMuni)
+```
+
+Verify if Isla de Mona was remove and Include Municipalities name
+```{r PolyID, fig.width=30, fig.height=10}
+
+MuniID <- aggregate(cbind(long, lat) ~ id, data = SpatialDataMuni,
+                    FUN=function(x)mean(range(x)))
+head(MuniID)
+
+ggplot() +
+		geom_polygon(aes(x = long, y = lat, group = group, label = "id"),
+								 data = SpatialDataMuni, 
+							 colour = "white", fill = "grey", alpha = .4, size = .3) + 
+	geom_text(data = MuniID, aes(x = long, y = lat, label = id)) + 
+	coord_map()
+```
+
+Above is the municipality map to use.
+
+
+```{r Cases_df}
+#Load data of cases
+load(".....RData")
+
+# There are 27 records without municipalities.
+
+length(table(Df$Municipio.Recidencia, exclude = ""))
+# Slecting zips using the table found in the internet
+# Df <-
+# 	dim(Df[!Df$Municipio.Recidencia %in% "",])
+
+
+A_cases <- data.frame(table(Df$Municipio.Recidencia, exclude = ""))
+
+colnames(A_cases)	<- c("Muni", "Cases")
+```
+
+```{r CutValues}
+
+# Create aggregated values of Cases
+A_cases$Cut <- cut(A_cases$Cases, breaks = c("0", "1", "50", "100", "200",
+																						 "300", "400", "500", Inf))
+
+summary(A_cases$Cut)
+###########################################
+A_cases$Cut2 <- cut(A_cases$Cases, breaks = c("0", "1", "100", "300", "500", Inf))
+
+summary(A_cases$Cut2)
+options(scipen=999)
+A_cases$CutIQR <- cut(A_cases$Cases, breaks = c(0, quantile(A_cases$Cases)),
+											labels = c("0-2", "2-47.2", "47.3-111", "112-202",
+																 paste("203-", max(A_cases$Cases), sep = ""))
+											)
+
+summary(A_cases$CutIQR)
+
+head(A_cases)
+A_cases$IDnum <- seq(1:78)
+```
+
+```{r}
+
+# I needed to an id per municipality because id name did not matched between the Spatial Data and the Df. 
+
+un_Muni <- data.frame(MuniID = unique(SpatialDataMuni$id))
+un_Muni$IDnum <- seq(1:78)
+
+SpatialDataMuniB <- merge(x = SpatialDataMuni, y = un_Muni, by.x = "id",
+												 by.y = "MuniID")
+
+SpatialDataMuniB <- merge(x = SpatialDataMuniB, y = A_cases, by.x = "IDnum",
+												 by.y = "IDnum")
+head(SpatialDataMuniB)
+
+```
+```{r map2, fig.width=15, fig.height=10}
+
+GroupID <- aggregate(cbind(long, lat) ~ group, data = SpatialDataMuniB,
+                    FUN=function(x)mean(range(x)))
+
+ggplot(data = SpatialDataMuniB) +
+		geom_polygon(aes(x = long, y = lat, group = id,
+										 fill = Cut, alpha = .4)) + 
+			geom_polygon(aes(x = long, y = lat, group = group, label = "id"),
+								 data = SpatialDataMuniB, 
+							 colour = "black", fill = "grey", alpha = .4, size = .3) + 
+	coord_map() +
+	geom_text(data = GroupID, aes(x = long, y = lat, label = group))
+```
+
+Eliminate unnecesary Group ID polygons
+```{r}
+SpatialDataMuniB <- SpatialDataMuniB[!SpatialDataMuniB$group %in% c("Mayagüez.2",
+										"Ponce.2", "Ponce.3", "Ponce.4", "Ponce.5", "Ponce.6",
+										"Peñuelas.2", "Peñuelas.3", "Peñuelas.4", "Peñuelas.5",
+										"Peñuelas.6",
+										"Vieques.2", "Vieques.3", "Vieques.4",
+										"Salinas.2", "Salinas.3", "Salinas.4", "Salinas.5",
+										"Salinas.6", "Salinas.7",
+										"Culebra.2", "Culebra.3", "Culebra.4", "Culebra.5", 
+										"Culebra.6", "Culebra.7","Culebra.8",
+										"Toa Baja.2", "Toa Baja.3",
+										"Santa Isabel.2", "Santa Isabel.3", "Santa Isabel.4",
+										"Fajardo.2", "Fajardo.3", "Fajardo.4", "Fajardo.5", 
+										"Fajardo.6", "Fajardo.7", "Fajardo.8", "Fajardo.9",
+										"Fajardo.10",
+										"Cabo Rojo.2",
+										"Juana Díaz.2",
+										"Naguabo.2",
+										"Loíza.2", "Loíza.3",
+										"Lajas.2", "Lajas.3", "Lajas.4", "Lajas.5", "Lajas.6",
+										"Lajas.7", "Lajas.8",
+										"Humacao.2", "Humacao.3",
+										"Guánica.2", "Guánica.3",
+										"Ceiba.2", "Ceiba.3"),]
+
+```
+## Include the numeric muncipality id (1:78). This is ideal because matching the municipalities character strings always give surprices in how the information was entered. When merge data sort the informatiomn by municipality include an id from 1 to 78 and then merge by this variable
+```{r subsetSpatialColums}
+PR_Muni_Map <- SpatialDataMuniB[, c("IDnum", "id", "group", "long", "lat",
+																		"piece")]
+```
+
+Test if the map is adequate to be use and dispaly information.
+```{r MapCut, fig.width=15, fig.height=10}
+ggplot(data = SpatialDataMuniB) +
+		geom_polygon(aes(x = long, y = lat, group = id,
+										 fill = Cut)) + 
+#geom_text(data = MuniID, aes(x = long, y = lat, label = id)) +
+	
+			geom_polygon(aes(x = long, y = lat, group = group, label = "id"),
+								 data = SpatialDataMuniB, 
+							 colour = "black", fill = "grey", alpha = .1) + #
+	theme(legend.position="bottom") +
+	coord_map() + 
+	
+	ggtitle("Número de Casos Reportados de Alzheimer por Municipio, 2008-2013") +
+	geom_text(data = NULL, x = -65.35, y = 18.46, 
+						label = paste("N = ", format(nrow(Df),
+																				 big.mark = ",")
+						)
+	)
+```
+
+## Save Map
+
+Save the managed map as an .RData for futher use in outcome projects.
+```{r saveMap}
+save(PR_Muni_Map,
+		 file = "./Spatial_Polygons/Puerto_Rico/PR_Muni_Map.RData")
+
+save(PR_Muni_Map,
+		 file = 
+		 	"./Spatial/Spatial_Management/Puerto_Rico/PR_Muni_Map.RData")
+
+rm(list = ls(all = TRUE))
+```
+
+

@@ -1,0 +1,23 @@
+---
+title: "Hospital Location Coverage"
+author: "José A. Bartolomei-Díaz, PhD - Outcome Project"
+date: "July 2, 2015"
+output: html_document
+---
+
+
+
+# Hospital Location Coverage
+
+Load Hospital Layer
+```{r Load_Hops_Layer}
+HospL <- readShapeSpatial("/home/surfprjab/Dropbox/OutcomeProjectTeam/shapefile/Hospital_Locations/HOSP_2014.shp")
+HospL2 <- as.data.frame(HospL)
+```
+
+```{r}
+library(ggplot2)
+ggplot() + geom_point(data = HospL2, aes(x = LONGITUDE, y = LATITUD),
+											color = "Yellow")
+```
+
